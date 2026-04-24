@@ -7,10 +7,8 @@
 #' @param N Integer. The number of individuals to simulate.
 #' @param cox_fits A named list of fitted Cox proportional hazards models (`coxph` objects),
 #'   one for each event type. The names are used as event type labels.
-#' @param L0_old A vector of previously observed baseline covariate values for L0,
-#'   used for resampling baseline covariates.
-#' @param A0_old A vector of previously observed baseline covariate values for A0,
-#'   used for resampling baseline covariates.
+#' @param list_old_vars A named list containing the old covariates. New covariates will
+#' be simulated by drawing from the old covariates with replacement.
 #' @param n_event_max Integer vector. Maximum number of times each event type can occur
 #'   per individual.
 #' @param term_events Integer or integer vector. Indices of event types that are terminal,
@@ -18,12 +16,14 @@
 #' @param intervention1 Optional function. Takes arguments `(j, sim_matrix)` and returns
 #'   an updated simulation matrix. Used to modify covariates dynamically at each event iteration.
 #' @param intervention2 Optional function. Takes arguments `(j, H_j)` and returns a modified
-#'   baseline cumulative hazard vector for event type `j`. Allows dynamic hazard modification.
+#'   baseline cumulative hazard vector for event type `j`. Allows dynamic hazard modification. The function
+#'   \code{intervention2 <- function(j, basehaz) if(j ==2) 1.15 * basehaz else basehaz}
+#'   performs an intervention where the baseline hazard of process 2 is multiplied by 1.15.
 #'
 #' @details
 #' The function simulates individual event histories by:
 #' \enumerate{
-#'   \item Sampling initial baseline covariates (`L0`, `A0`) by resampling observed values.
+#'   \item Sampling initial baseline covariates by resampling observed values.
 #'   \item Extracting baseline cumulative hazard functions from the Cox models.
 #'   \item Iteratively sampling event times.
 #'   \item Updating covariate histories and event counts.
@@ -35,7 +35,7 @@
 #'   \item `ID` — Individual identifier.
 #'   \item `Time` — Event time.
 #'   \item `Delta` — Event type indicator.
-#'   \item Baseline covariates `L0`, `A0`.
+#'   \item Baseline covariates
 #'   \item Columns for each event type indicating cumulative event counts.
 #' }
 #'
@@ -55,13 +55,13 @@
 #'
 #' # Then simulate new data:
 #' cox_fits <- list("D" = cox_death, "L" = cox_Disease)
-#' new_data <- simEventCox(100, cox_fits = cox_fits, L0_old = data_obs$L0, A0_old = data_obs$A0)
+#' list_old_vars <- list("L0" = data_obs$L0, "A0" = data_obs$A0)
+#' new_data <- simEventCox(100, cox_fits = cox_fits, list_old_vars = list_old_vars)
 #'
 #' @export
 simEventCox <- function(N,
                         cox_fits,
-                        L0_old,
-                        A0_old,
+                        list_old_vars = NULL,
                         n_event_max = c(1,1),
                         term_events = 1,
                         intervention1 = NULL,
@@ -75,9 +75,16 @@ simEventCox <- function(N,
   num_alive <- N                                          # Number of alive individuals
   T_k <- rep(0, N)                                        # Last event time
 
+  # Sampling new covariates
+  if(is.null(names(list_old_vars))) warning("list_old_vars must be named list")
+  num_cov <- length(list_old_vars)
   # Data frame for storing data
-  sim_data <- data.frame(L0 = sample(L0_old, N, TRUE),
-                         A0 = sample(A0_old, N, TRUE))
+  sim_data <- data.frame(matrix(ncol = num_cov, nrow = N))
+  for(j in 1:num_cov){
+    sim_data[,j] <- sample(list_old_vars[[j]], N, TRUE)
+  }
+  colnames(sim_data) <- names(list_old_vars)
+
   for (name in names(cox_fits)) sim_data[[name]] <- 0
 
   # List for results
@@ -130,9 +137,12 @@ simEventCox <- function(N,
       invhaz_fn[[j]](V[,j] / cox_term[[j]])
     })
 
+    # If we only have one individual, the matrix collapses to a vector
+    if(num_alive == 1) event_times <- matrix(event_times, nrow = 1, ncol = 6)
+
     # How many times can you experience the various events?
     for(j in seq_len(num_events)){
-      event_times[sim_data[, (2+j)] == n_event_max[j], j] <- Inf
+      event_times[sim_data[, (num_cov+j)] == n_event_max[j], j] <- Inf
     }
 
     # The next event is the minimum of these events
@@ -140,12 +150,12 @@ simEventCox <- function(N,
     Deltas <- apply(event_times, 1, which.min)
 
     # Update event counts
-    sim_data[cbind(seq_len(num_alive), Deltas + 2)] <- sim_data[cbind(seq_len(num_alive), Deltas + 2)] + 1
+    sim_data[cbind(seq_len(num_alive), Deltas + num_cov)] <- sim_data[cbind(seq_len(num_alive), Deltas + num_cov)] + 1
 
     # Store data
     kth_event <- data.table(ID = alive,
                             Time = T_k,
-                            Delta = Deltas)
+                            Delta = Deltas - 1)
 
     res_list[[idx]] <- cbind(kth_event, data.table::as.data.table(sim_data))
     idx <- idx + 1

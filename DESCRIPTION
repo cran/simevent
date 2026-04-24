@@ -1,6 +1,6 @@
 Package: simevent
 Title: Simulation and Analysis of Event History Data
-Version: 0.1.0
+Version: 0.1.1
 Authors@R: person("Michaela", "Lukacova", , "michaela.lukacova@sund.ku.dk", role = c("aut", "cre"))
 Description: Simulate event history data from a framework where treatment decisions 
     and disease progression are represented as counting process. The user can specify 
@@ -17,8 +17,8 @@ Config/testthat/edition: 3
 LinkingTo: Rcpp
 VignetteBuilder: knitr
 NeedsCompilation: yes
-Packaged: 2026-02-09 14:52:08 UTC; dns525
+Packaged: 2026-04-24 08:10:18 UTC; dns525
 Author: Michaela Lukacova [aut, cre]
 Maintainer: Michaela Lukacova <michaela.lukacova@sund.ku.dk>
 Repository: CRAN
-Date/Publication: 2026-02-11 20:20:02 UTC
+Date/Publication: 2026-04-24 08:30:02 UTC
